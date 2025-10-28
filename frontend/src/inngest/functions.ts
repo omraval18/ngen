@@ -264,13 +264,13 @@ export const generateSpeech = inngest.createFunction(
           speed?: number;
         };
 
-        let endpoint = env.TEXT_TO_SPEECH_URL;
+        const endpoint = env.TEXT_TO_SPEECH_URL;
 
         if (!speech.text || !speech.voice || !speech.language) {
           throw new Error("Missing required speech parameters");
         }
 
-        let body: RequestBody = {
+        const body: RequestBody = {
           text: speech.text,
           voice: speech.voice,
           lang_code: speech.language,
