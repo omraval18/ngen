@@ -22,17 +22,7 @@ import {
 } from "../ui/dropdown-menu";
 import { useRouter } from "next/navigation";
 import { usePlayerStore } from "~/stores/use-player-store";
-
-export interface TTSTrack {
-  id: string;
-  title: string | null;
-  createdAt: Date;
-  text: string | null;
-  language: string | null;
-  voice: string | null;
-  playUrl: string | null;
-  status: string | null;
-}
+import type { TTSTrack } from "~/types/tts";
 
 export function TTSTrackList({ tracks }: { tracks: TTSTrack[] }) {
   const [searchQuery, setSearchQuery] = useState("");

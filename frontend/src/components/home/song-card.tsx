@@ -1,21 +1,11 @@
 "use client";
 
-import type { Category, Like, Song } from "@prisma/client";
 import { Heart, Loader2, Music, Play } from "lucide-react";
 import { useState } from "react";
 import { getPlayUrl } from "~/actions/generation";
 import { toggleLikeSong } from "~/actions/song";
 import { usePlayerStore } from "~/stores/use-player-store";
-
-type SongWithRelation = Song & {
-  user: { name: string | null };
-  _count: {
-    likes: number;
-  };
-  categories: Category[];
-  thumbnailUrl?: string | null;
-  likes?: Like[];
-};
+import type { SongWithRelation } from "~/types/music";
 
 export function SongCard({ song }: { song: SongWithRelation }) {
   const [isLoading, setIsLoading] = useState(false);

@@ -1,15 +1,4 @@
-export interface Voice {
-  id: string;
-  name: string;
-  gender: "Female" | "Male";
-  langCode: string;
-}
-
-export interface Language {
-  code: string;
-  name: string;
-  flag: string;
-}
+import type { Voice, Language } from "~/types/tts";
 
 export const languages: Language[] = [
   { code: "a", name: "American English", flag: "🇺🇸" },

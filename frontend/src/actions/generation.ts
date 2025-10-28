@@ -11,21 +11,9 @@ import { env } from "~/env";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { groq } from "~/lib/ai";
 import { generateObject } from "ai";
-import z from "zod";
-
-export interface GenerateRequest {
-  prompt?: string;
-  lyrics?: string;
-  fullDescribedSong?: string;
-  describedLyrics?: string;
-  instrumental?: boolean;
-}
-
-export interface GenerateSpeechRequest {
-  text: string;
-  voice: string;
-  language: string;
-}
+import type { GenerateRequest } from "~/types/music";
+import type { GenerateSpeechRequest } from "~/types/tts";
+import { titleGenerationSchema } from "~/schemas/generation";
 
 export async function generateSong(generateRequest: GenerateRequest) {
   const session = await auth.api.getSession({
@@ -142,9 +130,7 @@ export async function generateTitle(
 
   const { object } = await generateObject({
     model,
-    schema: z.object({
-      title: z.string().min(1).max(50),
-    }),
+    schema: titleGenerationSchema,
     prompt: defaultPrompt[type] + prompt,
   });
 

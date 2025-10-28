@@ -2,7 +2,6 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
 import { useState, useEffect } from "react";
 import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
@@ -24,16 +23,7 @@ import {
 } from "../ui/form";
 import { languages, getVoicesByLanguage } from "~/lib/tts-voices";
 import { generateSpeech } from "~/actions/generation";
-
-const ttsFormSchema = z.object({
-  text: z
-    .string()
-    .min(1, { message: "Please enter text to convert to speech." }),
-  language: z.string().min(1, { message: "Please select a language." }),
-  voice: z.string().min(1, { message: "Please select a voice." }),
-});
-
-type TTSFormValues = z.infer<typeof ttsFormSchema>;
+import { ttsFormSchema, type TTSFormValues } from "~/schemas/tts";
 
 export function TTSPanel() {
   const [loading, setLoading] = useState(false);

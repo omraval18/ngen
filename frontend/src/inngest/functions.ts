@@ -1,6 +1,12 @@
 import { db } from "~/server/db";
 import { inngest } from "./client";
 import { env } from "~/env";
+import type {
+  SongGenerationRequest,
+  SongGenerationResponse,
+  SpeechGenerationRequest,
+  SpeechGenerationResponse,
+} from "~/types/api";
 
 export const generateSong = inngest.createFunction(
   {
@@ -54,20 +60,8 @@ export const generateSong = inngest.createFunction(
           },
         });
 
-        type RequestBody = {
-          guidance_scale?: number;
-          infer_step?: number;
-          audio_duration?: number;
-          seed?: number;
-          full_described_song?: string;
-          prompt?: string;
-          lyrics?: string;
-          described_lyrics?: string;
-          instrumental?: boolean;
-        };
-
         let endpoint = "";
-        let body: RequestBody = {};
+        let body: SongGenerationRequest = {};
 
         const commomParams = {
           guidance_scale: song.guidanceScale ?? undefined,
@@ -146,11 +140,7 @@ export const generateSong = inngest.createFunction(
         }
 
         try {
-          responseData = (await response.json()) as {
-            s3_key: string;
-            cover_image_s3_key: string;
-            categories: string[];
-          };
+          responseData = (await response.json()) as SongGenerationResponse;
         } catch (error) {
           console.error("Failed to parse Modal response:", error);
           throw new Error("Failed to parse Modal response");
@@ -257,20 +247,13 @@ export const generateSpeech = inngest.createFunction(
           },
         });
 
-        type RequestBody = {
-          text?: string;
-          voice?: string;
-          lang_code?: string;
-          speed?: number;
-        };
-
         const endpoint = env.TEXT_TO_SPEECH_URL;
 
         if (!speech.text || !speech.voice || !speech.language) {
           throw new Error("Missing required speech parameters");
         }
 
-        const body: RequestBody = {
+        const body: SpeechGenerationRequest = {
           text: speech.text,
           voice: speech.voice,
           lang_code: speech.language,
@@ -324,9 +307,7 @@ export const generateSpeech = inngest.createFunction(
         }
 
         try {
-          responseData = (await response.json()) as {
-            s3_key: string;
-          };
+          responseData = (await response.json()) as SpeechGenerationResponse;
         } catch (error) {
           console.error("Failed to parse Modal response:", error);
           throw new Error("Failed to parse Modal response");

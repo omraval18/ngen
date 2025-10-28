@@ -26,22 +26,7 @@ import {
 import { RenameDialog } from "./rename-dialog";
 import { useRouter } from "next/navigation";
 import { usePlayerStore } from "~/stores/use-player-store";
-
-export interface Track {
-  id: string;
-  title: string | null;
-  createdAt: Date;
-  instrumental: boolean;
-  prompt: string | null;
-  lyrics: string | null;
-  describedLyrics: string | null;
-  fullDescribedSong: string | null;
-  thumbnailUrl: string | null;
-  playUrl: string | null;
-  status: string | null;
-  createdByUserName: string | null;
-  published: boolean;
-}
+import type { Track } from "~/types/music";
 
 export function TrackList({ tracks }: { tracks: Track[] }) {
   const [searchQuery, setSearchQuery] = useState("");
