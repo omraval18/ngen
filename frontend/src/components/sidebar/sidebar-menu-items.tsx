@@ -1,6 +1,10 @@
 "use client";
 
-import { MusicNotesSimpleIcon, StackIcon } from "@phosphor-icons/react";
+import {
+  MusicNotesSimpleIcon,
+  StackIcon,
+  UserSoundIcon,
+} from "@phosphor-icons/react";
 import { usePathname } from "next/navigation";
 import { SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
 import { cn } from "~/lib/utils";
@@ -19,6 +23,12 @@ export default function SidebarMenuItems() {
       title: "Music",
       url: "/create",
       icon: MusicNotesSimpleIcon,
+      active: false,
+    },
+    {
+      title: "Text to Speech",
+      url: "/tts",
+      icon: UserSoundIcon,
       active: false,
     },
   ];

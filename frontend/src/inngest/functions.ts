@@ -210,3 +210,162 @@ export const generateSong = inngest.createFunction(
     }
   },
 );
+
+export const generateSpeech = inngest.createFunction(
+  {
+    id: "generate-speech",
+    concurrency: {
+      limit: 1,
+      key: "event.data.userId",
+    },
+    retries: 3,
+    onFailure: async ({ event }) => {
+      await db.speech.update({
+        where: {
+          id: (event?.data?.event?.data as { speechId: string }).speechId,
+        },
+        data: {
+          status: "failed",
+        },
+      });
+    },
+  },
+  { event: "generate-speech-event" },
+  async ({ event, step }) => {
+    const { speechId } = event.data as {
+      speechId: string;
+      userId: string;
+    };
+
+    const { userId, credits, endpoint, body } = await step.run(
+      "check-credits",
+      async () => {
+        const speech = await db.speech.findUniqueOrThrow({
+          where: {
+            id: speechId,
+          },
+          select: {
+            user: {
+              select: {
+                id: true,
+                credits: true,
+              },
+            },
+            text: true,
+            voice: true,
+            language: true,
+          },
+        });
+
+        type RequestBody = {
+          text?: string;
+          voice?: string;
+          lang_code?: string;
+          speed?: number;
+        };
+
+        let endpoint = env.TEXT_TO_SPEECH_URL;
+
+        if (!speech.text || !speech.voice || !speech.language) {
+          throw new Error("Missing required speech parameters");
+        }
+
+        let body: RequestBody = {
+          text: speech.text,
+          voice: speech.voice,
+          lang_code: speech.language,
+          speed: 1.0,
+        };
+
+        return {
+          userId: speech.user.id,
+          credits: speech.user.credits,
+          endpoint: endpoint,
+          body: body,
+        };
+      },
+    );
+
+    if (credits > 0) {
+      await step.run("set-status-processing", async () => {
+        return await db.speech.update({
+          where: {
+            id: speechId,
+          },
+          data: {
+            status: "processing",
+          },
+        });
+      });
+
+      const response = await step.fetch(endpoint, {
+        method: "POST",
+        body: JSON.stringify(body),
+        headers: {
+          "Content-Type": "application/json",
+          "Modal-Key": env.MODAL_KEY,
+          "Modal-Secret": env.MODAL_SECRET,
+        },
+      });
+
+      await step.run("update-speech-result", async () => {
+        let responseData = null;
+
+        if (!response.ok) {
+          const text = await response.text();
+          console.error(
+            `Modal API error (${response.status}):`,
+            text.substring(0, 500),
+          );
+
+          throw new Error(
+            `Speech generation failed with status ${response.status}`,
+          );
+        }
+
+        try {
+          responseData = (await response.json()) as {
+            s3_key: string;
+          };
+        } catch (error) {
+          console.error("Failed to parse Modal response:", error);
+          throw new Error("Failed to parse Modal response");
+        }
+
+        await db.speech.update({
+          where: {
+            id: speechId,
+          },
+          data: {
+            s3Key: responseData?.s3_key,
+            status: response.ok ? "processed" : "failed",
+          },
+        });
+      });
+
+      return await step.run("deduct-credits", async () => {
+        if (!response.ok) return;
+
+        return await db.user.update({
+          where: { id: userId },
+          data: {
+            credits: {
+              decrement: 1,
+            },
+          },
+        });
+      });
+    } else {
+      await step.run("set-status-no-credits", async () => {
+        return await db.speech.update({
+          where: {
+            id: speechId,
+          },
+          data: {
+            status: "no credits",
+          },
+        });
+      });
+    }
+  },
+);

@@ -21,6 +21,12 @@ export interface GenerateRequest {
   instrumental?: boolean;
 }
 
+export interface GenerateSpeechRequest {
+  text: string;
+  voice: string;
+  language: string;
+}
+
 export async function generateSong(generateRequest: GenerateRequest) {
   const session = await auth.api.getSession({
     headers: await headers(),
@@ -44,7 +50,7 @@ export async function queueSong(
   if (generateRequest.fullDescribedSong)
     title = generateRequest.fullDescribedSong;
 
-  title = await generateTitle(title);
+  title = await generateTitle(title, "song");
 
   const song = await db.song.create({
     data: {
@@ -123,20 +129,62 @@ export async function getPresignedUrl(key: string) {
   });
 }
 
-export async function generateTitle(lyrics: string): Promise<string> {
+export async function generateTitle(
+  prompt: string,
+  type: "song" | "speech",
+): Promise<string> {
   const model = groq("openai/gpt-oss-20b");
+  const defaultPrompt = {
+    song: "Generate a catchy song title based on the following lyrics or Prompt:\n\n",
+    speech:
+      "Generate a compelling speech title based on the following text or Prompt:\n\n",
+  };
 
   const { object } = await generateObject({
     model,
     schema: z.object({
       title: z.string().min(1).max(50),
     }),
-    prompt:
-      "Generate a catchy song title based on the following lyrics or Prompt:\n\n" +
-      lyrics,
+    prompt: defaultPrompt[type] + prompt,
   });
 
   const title = object.title;
 
   return title;
+}
+
+export async function generateSpeech(speechRequest: GenerateSpeechRequest) {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session) redirect("/auth/sign-in");
+
+  await queueSpeech(speechRequest, session.user.id);
+
+  revalidatePath("/tts");
+}
+
+export async function queueSpeech(
+  speechRequest: GenerateSpeechRequest,
+  userId: string,
+) {
+  let title = "Untitled Speech";
+
+  title = await generateTitle(speechRequest.text, "speech");
+
+  const speech = await db.speech.create({
+    data: {
+      userId: userId,
+      title: title,
+      text: speechRequest.text,
+      voice: speechRequest.voice,
+      language: speechRequest.language,
+    },
+  });
+
+  await inngest.send({
+    name: "generate-speech-event",
+    data: { speechId: speech.id, userId: speech.userId },
+  });
 }

@@ -17,6 +17,7 @@ image = (
     .apt_install("git", "ffmpeg", "libavcodec-dev", "libavformat-dev", "libavutil-dev")
     .pip_install_from_requirements("requirements.txt")
     .pip_install("torchcodec")
+    .pip_install("kokoro>=0.9.4", "soundfile")
     .run_commands(
         [
             "git clone https://github.com/ace-step/ACE-Step.git /tmp/ACE-Step",
@@ -65,6 +66,17 @@ class GenerateMusicResponse(BaseModel):
     audio_data: str
 
 
+class TextToSpeechRequest(BaseModel):
+    text: str
+    voice: str = "af_heart"
+    speed: float = 1.0
+    lang_code: str = "a"
+
+
+class TextToSpeechResponse(BaseModel):
+    s3_key: str
+
+
 @app.cls(
     image=image,
     gpu="L40S",
@@ -78,6 +90,7 @@ class MusicGenServer:
         import torch
         from acestep.pipeline_ace_step import ACEStepPipeline
         from diffusers import AutoPipelineForText2Image
+        from kokoro import KPipeline
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         self.music_model = ACEStepPipeline(
@@ -105,6 +118,57 @@ class MusicGenServer:
             cache_dir="/.cache/huggingface",
         )
         self.image_pipe.to("cuda")
+        self.tts_pipelines = {}
+
+    def generate_speech(
+        self, text: str, voice: str, speed: float, lang_code: str
+    ) -> TextToSpeechResponse:
+        import soundfile as sf
+        from kokoro import KPipeline
+
+        if lang_code not in self.tts_pipelines:
+            print(f"Initializing TTS pipeline for lang_code: {lang_code}")
+            self.tts_pipelines[lang_code] = KPipeline(lang_code=lang_code)
+
+        pipeline = self.tts_pipelines[lang_code]
+
+        ENDPOINT = os.environ["BUCKET_ENDPOINT"]
+        s3_client = boto3.client(
+            "s3",
+            aws_access_key_id=os.environ["BUCKET_ACCESS_KEY"],
+            config=Config(s3={"addressing_style": "virtual"}, signature_version="s3v4"),
+            aws_secret_access_key=os.environ["BUCKET_KEY_SECRET"],
+            endpoint_url=ENDPOINT,
+            region_name="us-east-1",
+        )
+        bucket_name = os.environ["BUCKET_NAME"]
+
+        output_dir = "/tmp/tts_outputs"
+        os.makedirs(output_dir, exist_ok=True)
+
+        print(f"Generating speech with voice: {voice}, speed: {speed}")
+        generator = pipeline(text, voice=voice, speed=speed, split_pattern=r"\n+")
+
+        all_audio = []
+        for i, (gs, ps, audio) in enumerate(generator):
+            print(f"Generated chunk {i}: {gs[:50]}...")
+            all_audio.append(audio)
+
+        import numpy as np
+
+        combined_audio = np.concatenate(all_audio)
+
+        temp_audio_path = os.path.join(output_dir, f"{uuid.uuid4()}.wav")
+        sf.write(temp_audio_path, combined_audio, 24000)
+        print(f"Saved audio to {temp_audio_path}")
+
+        audio_s3_key = f"tts/{uuid.uuid4()}.wav"
+        s3_client.upload_file(temp_audio_path, bucket_name, audio_s3_key)
+        print(f"Uploaded to S3: {audio_s3_key}")
+
+        os.remove(temp_audio_path)
+
+        return TextToSpeechResponse(s3_key=audio_s3_key)
 
     def prompt_qwen(self, question: str):
         messages = [{"role": "user", "content": question}]
@@ -279,22 +343,52 @@ class MusicGenServer:
             **request.model_dump(exclude={"described_lyrics", "prompt"}),
         )
 
+    @modal.fastapi_endpoint(method="POST", requires_proxy_auth=True)
+    def text_to_speech(self, request: TextToSpeechRequest) -> TextToSpeechResponse:
+        """
+        Supported lang_codes:
+        - 'a': American English
+        - 'b': British English
+        - 'e': Spanish
+        - 'f': French
+        - 'h': Hindi
+        - 'i': Italian
+        - 'j': Japanese
+        - 'p': Brazilian Portuguese
+        - 'z': Mandarin Chinese
+        """
+        return self.generate_speech(
+            text=request.text,
+            voice=request.voice,
+            speed=request.speed,
+            lang_code=request.lang_code,
+        )
+
 
 @app.local_entrypoint()
 def main():
     server = MusicGenServer()
-    endpoint_url = server.generate_with_described_lyrics.get_web_url()
+    tts_endpoint_url = server.text_to_speech.get_web_url()
 
-    request_data = GenerateWithDescribedLyricsRequest(
-        prompt="rave, funk, 140BPM, disco",
-        described_lyrics="lyrics about water bottles",
-        guidance_scale=15,
+    tts_request = TextToSpeechRequest(
+        text="""
+        The sky above the port was the color of television, tuned to a dead channel.
+        It's not like I'm using, Case heard someone say, as he shouldered his way through the crowd.
+        """,
+        voice="af_heart",
+        speed=1.0,
+        lang_code="a",
     )
 
-    payload = request_data.model_dump()
+    MODAL_KEY = "wk-aBc"
+    MODAL_SECRET = "ws-xYz"
 
-    response = requests.post(endpoint_url, json=payload)
+    headers = {"Modal-Key": MODAL_KEY, "Modal-Secret": MODAL_SECRET}
+
+    payload = tts_request.model_dump()
+
+    response = requests.post(tts_endpoint_url, headers=headers, json=payload)
     response.raise_for_status()
-    result = GenerateMusicResponseS3(**response.json())
+    result = TextToSpeechResponse(**response.json())
 
-    print(f"Success: {result.s3_key} {result.cover_image_s3_key} {result.categories}")
+    print(f"TTS Success! Audio uploaded to S3: {result.s3_key}")
