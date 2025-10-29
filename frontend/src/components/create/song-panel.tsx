@@ -7,8 +7,9 @@ import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
 import { Badge } from "../ui/badge";
 import { toast } from "sonner";
-import { generateSong, type GenerateRequest } from "~/actions/generation";
+import { generateSong } from "~/actions/generation";
 import { MusicNoteSimpleIcon, PlusIcon } from "@phosphor-icons/react";
+import type { GenerateRequest } from "~/types/music";
 
 const inspirationTags = [
   "80s synth-pop",

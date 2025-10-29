@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import type { Track } from "./track-list";
 import {
   Dialog,
   DialogClose,
@@ -14,6 +13,7 @@ import {
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
+import type { Track } from "~/types/music";
 
 export function RenameDialog({
   track,
